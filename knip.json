@@ -1,0 +1,16 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "tags": ["-lintignore"],
+  "workspaces": {
+    ".": {},
+    "packages/*": {
+      "entry": ["src/index.{ts,tsx,js,jsx}"],
+      "project": ["src/**/*.{ts,tsx,js,jsx}"]
+    },
+    "packages/cli-ui": {
+      "entry": ["src/main.tsx", "vite.config.ts"],
+      "project": ["src/**/*.{ts,tsx,js,jsx}"],
+      "ignoreDependencies": ["tailwindcss"]
+    }
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "name": "@diffdeck/cli",
+  "version": "1.0.4",
+  "description": "",
+  "bin": {
+    "diffdeck": "dist/diffdeck.mjs"
+  },
+  "files": [
+    "dist",
+    "skills"
+  ],
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build:cli": "esbuild src/index.ts --bundle --outfile=dist/diffdeck.mjs --format=esm --platform=node --banner:js='#!/usr/bin/env node'",
+    "sync:ui": "node scripts/sync-ui.js",
+    "build": "pnpm build:cli && pnpm sync:ui",
+    "prepublishOnly": "pnpm build"
+  },
+  "dependencies": {
+    "@diffdeck/core": "workspace:*",
+    "@diffdeck/shared": "workspace:*",
+    "cac": "^7.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.12.0",
+    "esbuild": "^0.28.0"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module"
+}
