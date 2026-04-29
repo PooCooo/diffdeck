@@ -10,7 +10,7 @@
     "skills"
   ],
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "vitest run",
     "build:cli": "esbuild src/index.ts --bundle --outfile=dist/diffdeck.mjs --format=esm --platform=node --banner:js='#!/usr/bin/env node'",
     "sync:ui": "node scripts/sync-ui.js",
     "build": "pnpm build:cli && pnpm sync:ui",
