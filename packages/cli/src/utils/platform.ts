@@ -84,6 +84,25 @@ export function parsePrUrl(raw: string, profileUrl?: string): ParsedPrUrl {
 }
 
 // ── HTTP Fetch ────────────────────────────────────────────────────────────────
+export const buildRequest = (parsed: ParsedPrUrl, token: string | null) => {
+  const url = new URL(parsed.diffEndpoint)
+
+  const headers: Record<string, string> = {
+    "User-Agent": "diffdeck-cli"
+  }
+
+  if (parsed.diffParams) {
+    for (const [k, v] of Object.entries(parsed.diffParams)) {
+      url.searchParams.set(k, v)
+    }
+  }
+
+  if (token) headers["Authorization"] = `Bearer ${token}`
+
+  if (parsed.acceptHeader) headers["Accept"] = parsed.acceptHeader
+
+  return { url, headers }
+}
 
 /**
  * Fetches the raw diff text for a PR/MR.
@@ -97,20 +116,7 @@ export async function fetchDiff(
   parsed: ParsedPrUrl,
   token: string | null
 ): Promise<string> {
-  const url = new URL(parsed.diffEndpoint);
-
-  if (parsed.diffParams) {
-    for (const [k, v] of Object.entries(parsed.diffParams)) {
-      url.searchParams.set(k, v);
-    }
-  }
-
-  const headers: Record<string, string> = {
-    "User-Agent": "diffdeck-cli",
-  };
-  if (parsed.acceptHeader) headers["Accept"] = parsed.acceptHeader;
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-
+  const { url, headers } = buildRequest(parsed, token)
   let res: Response;
   try {
     res = await fetch(url.toString(), { headers });
@@ -128,23 +134,25 @@ export async function fetchDiff(
     );
   }
 
-  // ── Platform-specific response parsing ──────────────────────────────────
-
-  if (parsed.platform === "gitlab") {
-    return parseGitLabResponse(res);
-  }
-
-  // GitHub: returns raw diff text directly (when Accept: application/vnd.github.v3.diff)
-  return res.text();
+  return await parseResponse(res, parsed.platform)
 }
 
 // ── Response parsers ─────────────────────────────────────────────────────────
-
 /**
  * GitLab /diffs with view=raw returns plain text on newer instances.
  * Older instances may return a JSON array of file-diff objects.
  * We detect which by content-type.
  */
+
+export const parseResponse = async (res: Response, platform: Platform) => {
+  if (platform === 'gitlab') {
+    return await parseGitLabResponse(res)
+  }
+
+  // GitHub: returns raw diff text directly (when Accept: application/vnd.github.v3.diff)
+  return await res.text()
+}
+
 async function parseGitLabResponse(res: Response): Promise<string> {
   const contentType = res.headers.get("content-type") ?? "";
 
