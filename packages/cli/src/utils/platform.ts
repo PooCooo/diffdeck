@@ -19,7 +19,7 @@ class GitHubClient implements PlatformClient {
   async fetchDiff(token: string | null): Promise<string> {
     const headers: Record<string, string> = {
       "User-Agent": "diffdeck-cli",
-      Accept: "application/vnd.github.v3.diff",
+      Accept: "application/vnd.github.diff",
     };
     if (token) headers["Authorization"] = `Bearer ${token}`;
 
@@ -28,14 +28,14 @@ class GitHubClient implements PlatformClient {
       res = await fetch(this.endpoint.toString(), { headers });
     } catch (err: unknown) {
       throw new Error(
-        `Network error fetching diff: ${(err as Error).message}\nURL: ${this.endpoint}`
+        `Network error fetching diff: ${(err as Error).message}\nURL: ${this.endpoint}`,
       );
     }
 
     if (!res.ok) {
       const hint = httpErrorHint(res.status, "github");
       throw new Error(
-        `HTTP ${res.status} ${res.statusText} from github API.\n${hint}`
+        `HTTP ${res.status} ${res.statusText} from github API.\n${hint}`,
       );
     }
 
@@ -51,7 +51,7 @@ class GitLabClient implements PlatformClient {
     const base = apiBase.href.endsWith("/") ? apiBase.href : `${apiBase.href}/`;
     const mrBase = new URL(
       `api/v4/projects/${projectId}/merge_requests/${iid}/`,
-      base
+      base,
     );
 
     this.diffsEndpoint = new URL("diffs", mrBase);
@@ -62,7 +62,7 @@ class GitLabClient implements PlatformClient {
 
   async fetchDiff(token: string | null): Promise<string> {
     const headers: Record<string, string> = { "User-Agent": "diffdeck-cli" };
-    if (token) headers["Authorization"] = `Bearer ${token}`;
+    if (token) headers["PRIVATE-TOKEN"] = token;
 
     // Primary: /diffs?view=raw (GitLab 15+)
     let res: Response;
@@ -70,7 +70,7 @@ class GitLabClient implements PlatformClient {
       res = await fetch(this.diffsEndpoint.toString(), { headers });
     } catch (err: unknown) {
       throw new Error(
-        `Network error fetching diff: ${(err as Error).message}\nURL: ${this.diffsEndpoint}`
+        `Network error fetching diff: ${(err as Error).message}\nURL: ${this.diffsEndpoint}`,
       );
     }
 
@@ -81,7 +81,7 @@ class GitLabClient implements PlatformClient {
       }
       const hint = httpErrorHint(res.status, "gitlab");
       throw new Error(
-        `HTTP ${res.status} ${res.statusText} from gitlab API.\n${hint}`
+        `HTTP ${res.status} ${res.statusText} from gitlab API.\n${hint}`,
       );
     }
 
@@ -96,21 +96,21 @@ class GitLabClient implements PlatformClient {
 
   /** Fallback for GitLab < 15: GET /merge_requests/:iid/changes */
   private async fetchDiffViaChanges(
-    headers: Record<string, string>
+    headers: Record<string, string>,
   ): Promise<string> {
     let res: Response;
     try {
       res = await fetch(this.changesEndpoint.toString(), { headers });
     } catch (err: unknown) {
       throw new Error(
-        `Network error fetching diff (fallback): ${(err as Error).message}\nURL: ${this.changesEndpoint}`
+        `Network error fetching diff (fallback): ${(err as Error).message}\nURL: ${this.changesEndpoint}`,
       );
     }
 
     if (!res.ok) {
       const hint = httpErrorHint(res.status, "gitlab");
       throw new Error(
-        `HTTP ${res.status} ${res.statusText} from gitlab API (fallback /changes).\n${hint}`
+        `HTTP ${res.status} ${res.statusText} from gitlab API (fallback /changes).\n${hint}`,
       );
     }
 
@@ -137,7 +137,7 @@ class GitLabClient implements PlatformClient {
 
     if (!Array.isArray(data)) {
       throw new Error(
-        "Unexpected GitLab /diffs response — expected a JSON array of file diffs."
+        "Unexpected GitLab /diffs response — expected a JSON array of file diffs.",
       );
     }
 
@@ -232,7 +232,7 @@ export function parsePrUrl(raw: string, _profileUrl?: string): PlatformClient {
       `Expected one of:\n` +
       `  GitHub  : https://github.com/{owner}/{repo}/pull/{number}\n` +
       `  GitLab  : https://gitlab.com/{namespace}/{repo}/-/merge_requests/{iid}\n` +
-      `For self-hosted platforms, ensure the URL path follows one of these patterns.`
+      `For self-hosted platforms, ensure the URL path follows one of these patterns.`,
   );
 }
 
@@ -248,7 +248,7 @@ export function parsePrUrl(raw: string, _profileUrl?: string): PlatformClient {
  */
 export async function fetchDiff(
   raw: string,
-  token: string | null
+  token: string | null,
 ): Promise<string> {
   const client = parsePrUrl(raw);
   return client.fetchDiff(token);
