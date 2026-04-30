@@ -1,7 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import type { CAC } from "cac";
 import { resolveProfile, resolveToken } from "../utils/config.ts";
-import { parsePrUrl, fetchDiff } from "../utils/platform.ts";
+import { fetchDiff } from "../utils/platform.ts";
 
 interface PullDiffOptions {
   profile?: string;
@@ -45,23 +45,12 @@ export function registerPullDiffCommands(cli: CAC): void {
           // Non-fatal — allow unauthenticated attempt for public repos
         }
 
-        // ── 3. Parse URL & build API endpoint ─────────────────────────────
-        let parsed;
-        try {
-          parsed = parsePrUrl(prUrl, profile?.url);
-        } catch (err: unknown) {
-          console.error(`Error: ${(err as Error).message}`);
-          process.exit(1);
-        }
+        console.error(`Fetching diff from ${prParsedUrl.hostname}…`);
 
-        console.error(
-          `Fetching ${parsed.platform} diff from ${prParsedUrl.hostname}…`
-        );
-
-        // ── 4. Fetch diff ──────────────────────────────────────────────────
+        // ── 3. Fetch diff ──────────────────────────────────────────────────
         let diff: string;
         try {
-          diff = await fetchDiff(parsed, token);
+          diff = await fetchDiff(prUrl, token);
         } catch (err: unknown) {
           console.error(`Error: ${(err as Error).message}`);
           process.exit(1);

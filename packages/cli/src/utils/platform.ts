@@ -1,21 +1,187 @@
 // ── Types ────────────────────────────────────────────────────────────────────
 
-export type Platform = "github" | "gitlab" | "unknown";
+type Platform = "github" | "gitlab";
 
-export interface ParsedPrUrl {
-  platform: Platform;
-  /** Fully-qualified API endpoint for fetching the diff */
-  diffEndpoint: string;
-  /** Accept header to set on the request, if required */
-  acceptHeader?: string;
-  /** Additional query params to append */
-  diffParams?: Record<string, string>;
+// ── Platform Clients ─────────────────────────────────────────────────────────
+
+interface PlatformClient {
+  fetchDiff(token: string | null): Promise<string>;
+}
+
+class GitHubClient implements PlatformClient {
+  private readonly endpoint: URL;
+
+  constructor(apiBase: URL, owner: string, repo: string, pullNumber: string) {
+    const base = apiBase.href.endsWith("/") ? apiBase.href : `${apiBase.href}/`;
+    this.endpoint = new URL(`repos/${owner}/${repo}/pulls/${pullNumber}`, base);
+  }
+
+  async fetchDiff(token: string | null): Promise<string> {
+    const headers: Record<string, string> = {
+      "User-Agent": "diffdeck-cli",
+      Accept: "application/vnd.github.v3.diff",
+    };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    let res: Response;
+    try {
+      res = await fetch(this.endpoint.toString(), { headers });
+    } catch (err: unknown) {
+      throw new Error(
+        `Network error fetching diff: ${(err as Error).message}\nURL: ${this.endpoint}`
+      );
+    }
+
+    if (!res.ok) {
+      const hint = httpErrorHint(res.status, "github");
+      throw new Error(
+        `HTTP ${res.status} ${res.statusText} from github API.\n${hint}`
+      );
+    }
+
+    return res.text();
+  }
+}
+
+class GitLabClient implements PlatformClient {
+  private readonly diffsEndpoint: URL;
+  private readonly changesEndpoint: URL;
+
+  constructor(apiBase: URL, projectId: string, iid: string) {
+    const base = apiBase.href.endsWith("/") ? apiBase.href : `${apiBase.href}/`;
+    const mrBase = new URL(
+      `api/v4/projects/${projectId}/merge_requests/${iid}/`,
+      base
+    );
+
+    this.diffsEndpoint = new URL("diffs", mrBase);
+    this.diffsEndpoint.searchParams.set("view", "raw");
+
+    this.changesEndpoint = new URL("changes", mrBase);
+  }
+
+  async fetchDiff(token: string | null): Promise<string> {
+    const headers: Record<string, string> = { "User-Agent": "diffdeck-cli" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    // Primary: /diffs?view=raw (GitLab 15+)
+    let res: Response;
+    try {
+      res = await fetch(this.diffsEndpoint.toString(), { headers });
+    } catch (err: unknown) {
+      throw new Error(
+        `Network error fetching diff: ${(err as Error).message}\nURL: ${this.diffsEndpoint}`
+      );
+    }
+
+    // Fallback: older GitLab instances may return 404 or non-diff responses for /diffs
+    if (!res.ok) {
+      if (res.status === 404 || res.status === 422) {
+        return this.fetchDiffViaChanges(headers);
+      }
+      const hint = httpErrorHint(res.status, "gitlab");
+      throw new Error(
+        `HTTP ${res.status} ${res.statusText} from gitlab API.\n${hint}`
+      );
+    }
+
+    const text = await this.parseDiffsResponse(res);
+    // Empty body from /diffs can indicate an unsupported old instance — fall back
+    if (!text.trim()) {
+      return this.fetchDiffViaChanges(headers);
+    }
+
+    return text;
+  }
+
+  /** Fallback for GitLab < 15: GET /merge_requests/:iid/changes */
+  private async fetchDiffViaChanges(
+    headers: Record<string, string>
+  ): Promise<string> {
+    let res: Response;
+    try {
+      res = await fetch(this.changesEndpoint.toString(), { headers });
+    } catch (err: unknown) {
+      throw new Error(
+        `Network error fetching diff (fallback): ${(err as Error).message}\nURL: ${this.changesEndpoint}`
+      );
+    }
+
+    if (!res.ok) {
+      const hint = httpErrorHint(res.status, "gitlab");
+      throw new Error(
+        `HTTP ${res.status} ${res.statusText} from gitlab API (fallback /changes).\n${hint}`
+      );
+    }
+
+    return this.parseChangesResponse(res);
+  }
+
+  /** /diffs: plain text on newer instances, JSON array on older ones */
+  private async parseDiffsResponse(res: Response): Promise<string> {
+    const contentType = res.headers.get("content-type") ?? "";
+
+    if (
+      contentType.includes("text/plain") ||
+      contentType.includes("text/x-diff")
+    ) {
+      return res.text();
+    }
+
+    let data: unknown;
+    try {
+      data = await res.json();
+    } catch {
+      return res.text();
+    }
+
+    if (!Array.isArray(data)) {
+      throw new Error(
+        "Unexpected GitLab /diffs response — expected a JSON array of file diffs."
+      );
+    }
+
+    return (data as Array<{ diff?: string }>)
+      .map((f) => f.diff ?? "")
+      .filter(Boolean)
+      .join("\n");
+  }
+
+  /**
+   * /changes returns an MR object with a top-level `changes` array.
+   * Each element has a `diff` string field.
+   * Reference: https://docs.gitlab.com/api/merge_requests/#retrieve-merge-request-changes
+   */
+  private async parseChangesResponse(res: Response): Promise<string> {
+    let data: unknown;
+    try {
+      data = await res.json();
+    } catch {
+      throw new Error(
+        "GitLab /changes returned non-JSON response — cannot parse diff."
+      );
+    }
+
+    type ChangesPayload = { changes?: Array<{ diff?: string }> };
+    const payload = data as ChangesPayload;
+
+    if (!Array.isArray(payload?.changes)) {
+      throw new Error(
+        "Unexpected GitLab /changes response — expected an object with a `changes` array."
+      );
+    }
+
+    return payload.changes
+      .map((f) => f.diff ?? "")
+      .filter(Boolean)
+      .join("\n");
+  }
 }
 
 // ── URL Parsing ──────────────────────────────────────────────────────────────
 
 /**
- * Parses a web PR/MR URL into everything needed to call the platform API.
+ * Parses a web PR/MR URL and returns the appropriate platform client.
  *
  * Platform is detected by URL *path shape*, not just hostname, so self-hosted
  * instances work correctly:
@@ -23,10 +189,10 @@ export interface ParsedPrUrl {
  *   GitLab  : /{...}/-/merge_requests/{iid}
  *
  * @param raw        The full PR/MR web URL, e.g. https://github.com/owner/repo/pull/42
- * @param profileUrl Optional base URL from the matched config profile — used to
- *                   derive the GitHub Enterprise API base when the host is not github.com
+ * @param profileUrl Optional base URL from the matched config profile — reserved for
+ *                   future use (e.g. deriving Enterprise API base overrides).
  */
-export function parsePrUrl(raw: string, profileUrl?: string): ParsedPrUrl {
+export function parsePrUrl(raw: string, _profileUrl?: string): PlatformClient {
   let u: URL;
   try {
     u = new URL(raw);
@@ -42,36 +208,23 @@ export function parsePrUrl(raw: string, profileUrl?: string): ParsedPrUrl {
   const githubMatch = pathname.match(/^\/([^/]+)\/([^/]+)\/pull\/(\d+)/);
   if (githubMatch) {
     const [, owner, repo, num] = githubMatch;
-    // GitHub.com uses api.github.com; GitHub Enterprise Server uses /api/v3
     const apiBase =
       host === "github.com"
-        ? "https://api.github.com"
-        : `${u.protocol}//${host}/api/v3`;
+        ? new URL("https://api.github.com")
+        : new URL(`${u.protocol}//${host}/api/v3/`);
 
-    return {
-      platform: "github",
-      diffEndpoint: `${apiBase}/repos/${owner}/${repo}/pulls/${num}`,
-      acceptHeader: "application/vnd.github.v3.diff",
-    };
+    return new GitHubClient(apiBase, owner!, repo!, num!);
   }
 
   // ── GitLab / GitLab self-hosted ──────────────────────────────────────────
   // Path: /{namespace...}/{repo}/-/merge_requests/{iid}
-  // Namespace can be multi-level: /group/subgroup/repo/-/merge_requests/42
   const gitlabMatch = pathname.match(/^(\/.*?)\/-\/merge_requests\/(\d+)/);
   if (gitlabMatch) {
     const [, projectPath, iid] = gitlabMatch;
-    // URL-encode the project path (remove leading slash first)
     const projectId = encodeURIComponent(projectPath!.replace(/^\//, ""));
-    const apiBase = `${u.protocol}//${host}`;
+    const apiBase = new URL(`${u.protocol}//${host}/`);
 
-    return {
-      platform: "gitlab",
-      diffEndpoint: `${apiBase}/api/v4/projects/${projectId}/merge_requests/${iid}/diffs`,
-      // view=raw returns plain-text unified diff (GitLab 15+).
-      // For older instances this may fall back to JSON; fetchDiff handles both.
-      diffParams: { view: "raw" },
-    };
+    return new GitLabClient(apiBase, projectId, iid!);
   }
 
   throw new Error(
@@ -83,102 +236,22 @@ export function parsePrUrl(raw: string, profileUrl?: string): ParsedPrUrl {
   );
 }
 
-// ── HTTP Fetch ────────────────────────────────────────────────────────────────
-export const buildRequest = (parsed: ParsedPrUrl, token: string | null) => {
-  const url = new URL(parsed.diffEndpoint)
-
-  const headers: Record<string, string> = {
-    "User-Agent": "diffdeck-cli"
-  }
-
-  if (parsed.diffParams) {
-    for (const [k, v] of Object.entries(parsed.diffParams)) {
-      url.searchParams.set(k, v)
-    }
-  }
-
-  if (token) headers["Authorization"] = `Bearer ${token}`
-
-  if (parsed.acceptHeader) headers["Accept"] = parsed.acceptHeader
-
-  return { url, headers }
-}
+// ── Public API ────────────────────────────────────────────────────────────────
 
 /**
  * Fetches the raw diff text for a PR/MR.
  *
+ * - Automatically detects the platform from the URL path shape.
  * - Sets Authorization: Bearer <token> when token is provided.
- * - Handles platform-specific response shapes (GitHub → raw text,
- *   GitLab → JSON array of file diffs).
+ * - Handles platform-specific response shapes and version fallbacks.
  * - Throws with an actionable message on HTTP errors.
  */
 export async function fetchDiff(
-  parsed: ParsedPrUrl,
+  raw: string,
   token: string | null
 ): Promise<string> {
-  const { url, headers } = buildRequest(parsed, token)
-  let res: Response;
-  try {
-    res = await fetch(url.toString(), { headers });
-  } catch (err: unknown) {
-    throw new Error(
-      `Network error fetching diff: ${(err as Error).message}\n` +
-        `URL: ${url.toString()}`
-    );
-  }
-
-  if (!res.ok) {
-    const hint = httpErrorHint(res.status, parsed.platform);
-    throw new Error(
-      `HTTP ${res.status} ${res.statusText} from ${parsed.platform} API.\n${hint}`
-    );
-  }
-
-  return await parseResponse(res, parsed.platform)
-}
-
-// ── Response parsers ─────────────────────────────────────────────────────────
-/**
- * GitLab /diffs with view=raw returns plain text on newer instances.
- * Older instances may return a JSON array of file-diff objects.
- * We detect which by content-type.
- */
-
-export const parseResponse = async (res: Response, platform: Platform) => {
-  if (platform === 'gitlab') {
-    return await parseGitLabResponse(res)
-  }
-
-  // GitHub: returns raw diff text directly (when Accept: application/vnd.github.v3.diff)
-  return await res.text()
-}
-
-async function parseGitLabResponse(res: Response): Promise<string> {
-  const contentType = res.headers.get("content-type") ?? "";
-
-  if (contentType.includes("text/plain") || contentType.includes("text/x-diff")) {
-    return res.text();
-  }
-
-  // JSON array: [{ diff: "...", new_path: "...", ... }, ...]
-  let data: unknown;
-  try {
-    data = await res.json();
-  } catch {
-    // If we can't parse JSON, fall back to raw text
-    return res.text();
-  }
-
-  if (!Array.isArray(data)) {
-    throw new Error(
-      "Unexpected GitLab diff response shape — expected a JSON array of file diffs."
-    );
-  }
-
-  return (data as Array<{ diff?: string }>)
-    .map((f) => f.diff ?? "")
-    .filter(Boolean)
-    .join("\n");
+  const client = parsePrUrl(raw);
+  return client.fetchDiff(token);
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
