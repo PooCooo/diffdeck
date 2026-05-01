@@ -74,6 +74,21 @@ export async function upsertProfile(
   await writeConfig(existing);
 }
 
+export async function deleteProfile(name: string): Promise<void> {
+  const config = await readConfig() as DiffdeckConfig;
+
+  const { [name]: _, ...restProfiles} = config?.profiles ?? {};
+
+  const nextDefault = 
+    config.default === name ? Object.keys(restProfiles)[0] ?? config.default : config.default;
+
+  await writeConfig({
+    ...config,
+    profiles: restProfiles,
+    default: nextDefault
+  })
+}
+
 // ── Resolve profile for a given PR URL ─────────────────────────────────────
 
 /**

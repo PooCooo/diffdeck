@@ -3,6 +3,7 @@ import {
   readConfig,
   upsertProfile,
   getConfigFilePath,
+  deleteProfile,
 } from "../utils/config.ts";
 
 interface ConfigSetOptions {
@@ -15,6 +16,9 @@ interface ConfigSetOptions {
 interface ConfigGetOptions {
   profile?: string;
 }
+interface ConfigDeleteOptions {
+  profile?: string;
+}
 
 export function registerConfigCommands(cli: CAC): void {
   // ── config set ────────────────────────────────────────────────────────────
@@ -23,7 +27,7 @@ export function registerConfigCommands(cli: CAC): void {
     .option("--url <url>", "Base URL of the code platform (e.g. https://github.com)")
     .option("--auth-token <token>", "Auth token for the platform")
     .option("--profile <name>", "Profile name to create/update", { default: "default" })
-    .option("--make-default", "Set this profile as the default", { default: false })
+    .option("--make-default", "Set this profile as the default", { default: true })
     .example("  diffdeck config set --url https://github.com --auth-token ghp_xxx")
     .example("  diffdeck config set --url https://gitlab.com --auth-token glpat_xxx --profile gl")
     .example("  diffdeck config set --url https://git.corp.com --auth-token xxx --profile corp --make-default")
@@ -38,14 +42,16 @@ export function registerConfigCommands(cli: CAC): void {
       }
 
       // Validate URL
+      let inputUrl: URL;
       try {
-        new URL(options.url);
+        inputUrl = new URL(options.url);
       } catch {
         console.error(`Error: "--url ${options.url}" is not a valid URL`);
         process.exit(1);
       }
 
-      const profileName = options.profile ?? "default";
+
+      const profileName = options.profile ? options.profile : inputUrl.hostname;
       await upsertProfile(
         profileName,
         { url: options.url, authToken: options.authToken },
@@ -111,6 +117,39 @@ export function registerConfigCommands(cli: CAC): void {
         process.stdout.write(`${name}${isDefault ? " (default)" : ""}\n`);
       }
     });
+
+  // -- config delete ────────────────────────────────────────────────────────
+  cli
+    .command("config delete", "Delelte a named auth profile")
+    .option("--profile <name>", "Profile name to delete (defaults to the default profile")
+    .example(" diffdeck config delete")
+    .example(" diffdeck config delete --profile gl")
+    .action(async (options: ConfigDeleteOptions) => {
+      const config = await readConfig();
+
+      if (!config || Object.keys(config.profiles).length === 0) {
+        console.error("No profiles configured. Create one with:\n" +
+          " diffdeck config set --url <url> --auth-token <token> --profile <name>"
+        )
+        process.exit(1);
+      }
+
+      if (!options.profile) {
+        console.error("Error: --profile is required. Example:\n" +
+          " diffdeck config delete --profile gl"
+        )
+        process.exit(1);
+      }
+
+      const profileName = options.profile;
+      if (!config.profiles[profileName]) {
+        console.error(`Profile "${profileName}" not found. Avaliable profiles: ${Object.keys(config.profiles).join(", ") || "(none)"}`)
+        process.exit(1);
+      }
+
+      await deleteProfile(profileName);
+      console.error(`Profile "${profileName}" deleted from ${getConfigFilePath()}`);
+    })
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
