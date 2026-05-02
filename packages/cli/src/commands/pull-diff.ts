@@ -1,5 +1,5 @@
 import { writeFile } from "node:fs/promises";
-import type { CAC } from "cac";
+import type { Command } from "commander";
 import { resolveProfile, resolveToken } from "../utils/config.ts";
 import { fetchDiff } from "../utils/platform.ts";
 
@@ -7,20 +7,20 @@ interface PullDiffOptions {
   profile?: string;
 }
 
-export function registerPullDiffCommands(cli: CAC): void {
-  cli
-    .command(
-      "pull-diff <pr_url> [output]",
-      "Fetch PR/MR diff from a code platform"
+export function registerPullDiffCommands(program: Command): void {
+  program
+    .command("pull-diff <pr_url> [output]")
+    .description("Fetch PR/MR diff from a code platform")
+    .option("--profile <name>", "Force a specific config profile for auth lookup")
+    .addHelpText(
+      "after",
+      `
+Examples:
+  diffdeck pull-diff https://github.com/owner/repo/pull/42
+  diffdeck pull-diff https://github.com/owner/repo/pull/42 patch.diff
+  diffdeck pull-diff https://github.com/owner/repo/pull/42 -
+  diffdeck pull-diff https://gitlab.com/ns/repo/-/merge_requests/7 result.diff`
     )
-    .option(
-      "--profile <name>",
-      "Force a specific config profile for auth lookup"
-    )
-    .example("  diffdeck pull-diff https://github.com/owner/repo/pull/42")
-    .example("  diffdeck pull-diff https://github.com/owner/repo/pull/42 patch.diff")
-    .example("  diffdeck pull-diff https://github.com/owner/repo/pull/42 -")
-    .example("  diffdeck pull-diff https://gitlab.com/ns/repo/-/merge_requests/7 result.diff")
     .action(
       async (prUrl: string, output: string | undefined, options: PullDiffOptions) => {
         // ── 1. Validate URL ────────────────────────────────────────────────

@@ -1,4 +1,4 @@
-import type { CAC } from "cac";
+import type { Command } from "commander";
 import { parsePatch, formatIndexedChanges, indexChanges } from "@diffdeck/core";
 import { readFile } from "node:fs/promises";
 import { writeFileSync } from "node:fs";
@@ -7,8 +7,10 @@ interface IndexOptions {
   output: string;
 }
 
-export function registerIndexCommands(cli: CAC) {
-  cli.command("index <diff_file>")
+export function registerIndexCommands(program: Command) {
+  program
+    .command("index <diff_file>")
+    .description("Index changes in a diff file")
     .option("-o, --output <file>", "output file")
     .action(IndexAction);
 }

@@ -1,4 +1,4 @@
-import type { CAC } from "cac";
+import type { Command } from "commander";
 import {
   readConfig,
   upsertProfile,
@@ -6,72 +6,85 @@ import {
   deleteProfile,
 } from "../utils/config.ts";
 
-interface ConfigSetOptions {
-  url: string;
-  authToken: string;
-  profile: string;
-  makeDefault: boolean;
-}
+export function registerConfigCommands(program: Command): void {
+  const config = program
+    .command("config")
+    .description("Manage auth profiles");
 
-interface ConfigGetOptions {
-  profile?: string;
-}
-interface ConfigDeleteOptions {
-  profile?: string;
-}
+  // ── config set ──────────────────────────────────────────────────────────────
+  config
+    .command("set")
+    .description("Add or update an auth profile")
+    .requiredOption("--url <url>", "Base URL of the code platform (e.g. https://github.com)")
+    .requiredOption("--auth-token <token>", "Auth token for the platform")
+    .option("--profile <name>", "Profile name to create or update")
+    .option("--make-default", "Set this profile as the default", false)
+    .addHelpText(
+      "after",
+      `
+Examples:
+  diffdeck config set --url https://github.com --auth-token ghp_xxx
+  diffdeck config set --url https://gitlab.com --auth-token glpat_xxx --profile gl
+  diffdeck config set --url https://git.corp.com --auth-token xxx --profile corp --make-default`
+    )
+    .action(async (options: { url: string; authToken: string; profile?: string; makeDefault: boolean }) => {
+      await handleConfigSet(options);
+    });
 
-type ConfigCommandOptions = ConfigSetOptions & ConfigGetOptions & ConfigDeleteOptions;
+  // ── config get ──────────────────────────────────────────────────────────────
+  config
+    .command("get")
+    .description("Print profile config (token masked)")
+    .option("--profile <name>", "Profile name to read (defaults to default profile)")
+    .addHelpText(
+      "after",
+      `
+Examples:
+  diffdeck config get
+  diffdeck config get --profile gl`
+    )
+    .action(async (options: { profile?: string }) => {
+      await handleConfigGet(options);
+    });
 
-export function registerConfigCommands(cli: CAC): void {
-  cli
-    .command("config <action>", "Manage auth profiles")
-    .usage("config <action> [options]")
-    .option("--url <url>", "Base URL of the code platform (e.g. https://github.com)")
-    .option("--auth-token <token>", "Auth token for the platform")
-    .option("--profile <name>", "Profile name to create, read, or delete")
-    .option("--make-default", "Set this profile as the default", { default: false })
-    .example("  diffdeck config set --url https://github.com --auth-token ghp_xxx")
-    .example("  diffdeck config get")
-    .example("  diffdeck config get --profile gl")
-    .example("  diffdeck config list")
-    .example("  diffdeck config delete --profile gl")
-    .example("  diffdeck config set --url https://gitlab.com --auth-token glpat_xxx --profile gl")
-    .example("  diffdeck config set --url https://git.corp.com --auth-token xxx --profile corp --make-default")
-    .action(async (action: string, options: ConfigCommandOptions) => {
-      switch (action) {
-        case "set":
-          await handleConfigSet(options);
-          return;
-        case "get":
-          await handleConfigGet(options);
-          return;
-        case "list":
-          await handleConfigList();
-          return;
-        case "delete":
-          await handleConfigDelete(options);
-          return;
-        default:
-          console.error(
-            `Unknown config action "${action}". Expected one of: set, get, list, delete`
-          );
-          process.exit(1);
-      }
+  // ── config list ─────────────────────────────────────────────────────────────
+  config
+    .command("list")
+    .description("List all configured profiles")
+    .addHelpText(
+      "after",
+      `
+Examples:
+  diffdeck config list`
+    )
+    .action(async () => {
+      await handleConfigList();
+    });
+
+  // ── config delete ───────────────────────────────────────────────────────────
+  config
+    .command("delete")
+    .description("Delete an auth profile")
+    .requiredOption("--profile <name>", "Profile name to delete")
+    .addHelpText(
+      "after",
+      `
+Examples:
+  diffdeck config delete --profile gl`
+    )
+    .action(async (options: { profile: string }) => {
+      await handleConfigDelete(options);
     });
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-async function handleConfigSet(options: ConfigSetOptions): Promise<void> {
-  if (!options.url) {
-    console.error("Error: --url is required");
-    process.exit(1);
-  }
-  if (!options.authToken) {
-    console.error("Error: --auth-token is required");
-    process.exit(1);
-  }
-
+async function handleConfigSet(options: {
+  url: string;
+  authToken: string;
+  profile?: string;
+  makeDefault: boolean;
+}): Promise<void> {
   let inputUrl: URL;
   try {
     inputUrl = new URL(options.url);
@@ -89,7 +102,7 @@ async function handleConfigSet(options: ConfigSetOptions): Promise<void> {
   console.error(`Profile "${profileName}" saved to ${getConfigFilePath()}`);
 }
 
-async function handleConfigGet(options: ConfigGetOptions): Promise<void> {
+async function handleConfigGet(options: { profile?: string }): Promise<void> {
   const config = await readConfig();
   if (!config) {
     console.error(
@@ -135,21 +148,13 @@ async function handleConfigList(): Promise<void> {
   }
 }
 
-async function handleConfigDelete(options: ConfigDeleteOptions): Promise<void> {
+async function handleConfigDelete(options: { profile: string }): Promise<void> {
   const config = await readConfig();
 
   if (!config || Object.keys(config.profiles).length === 0) {
     console.error(
       "No profiles configured. Create one with:\n" +
         " diffdeck config set --url <url> --auth-token <token> --profile <name>"
-    );
-    process.exit(1);
-  }
-
-  if (!options.profile) {
-    console.error(
-      "Error: --profile is required. Example:\n" +
-        " diffdeck config delete --profile gl"
     );
     process.exit(1);
   }

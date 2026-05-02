@@ -1,10 +1,3 @@
-/**
- * Render command: starts a local web server for diff review.
- *
- * Reads sub-patches from stdin or files, serves pre-built static UI,
- * blocks until the user submits review decisions, then outputs them to stdout.
- */
-
 import {
   createServer,
   type ServerResponse,
@@ -17,7 +10,7 @@ import type{
   SubPatch,
   ReviewResponse,
 } from "@diffdeck/shared";
-import { CAC } from "cac";
+import type { Command } from "commander";
 import { readStdin } from "../utils/read";
 
 interface RenderOptions {
@@ -26,10 +19,11 @@ interface RenderOptions {
 
 const SUB_PATCH_SEPARATOR = "===SUB_PATCH===";
 
-export function registerRenderCommands(cli: CAC) {
-  cli
+export function registerRenderCommands(program: Command) {
+  program
     .command("render <source>")
-    .option("-p, --port <port>", "port")
+    .description("Start a local web server for diff review")
+    .option("-p, --port <port>", "port to listen on")
     .action(RenderAction);
 }
 
