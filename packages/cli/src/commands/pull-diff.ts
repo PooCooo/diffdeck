@@ -40,7 +40,8 @@ export function registerPullDiffCommands(cli: CAC): void {
           console.error(
             `Warning: No auth token found for "${prParsedUrl.hostname}".\n` +
               `Public repositories may still work; private repositories will fail with 401/404.\n` +
-              `To add a token: diffdeck config set --url ${prParsedUrl.origin} --auth-token <token>`
+              `To add a token: diffdeck config set --url ${prParsedUrl.origin} --auth-token <token>\n` +
+              `--------------------------------`
           );
           // Non-fatal — allow unauthenticated attempt for public repos
         }

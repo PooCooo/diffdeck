@@ -127,18 +127,7 @@ export async function resolveProfile(
     }
   }
 
-  // 3. Well-known implicit profile names
-  const wellKnown: Record<string, string> = {
-    "github.com": "github",
-    "gitlab.com": "gitlab",
-  };
-  const implicitName = wellKnown[prHost];
-  if (implicitName) {
-    const p = config.profiles[implicitName];
-    if (p) return { ...p, name: implicitName };
-  }
-
-  // 4. Fall back to the default profile
+  // 3. Fall back to the default profile
   const def = config.profiles[config.default];
   if (def) return { ...def, name: config.default };
 
