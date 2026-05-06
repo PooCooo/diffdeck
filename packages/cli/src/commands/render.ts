@@ -8,13 +8,17 @@ import type{
   AgentDraftComment,
   ReviewSubmission,
   SubPatch,
-  ReviewResponse,
+  ReviewResponse
 } from "@diffdeck/shared";
 import type { Command } from "commander";
 import { readStdin } from "../utils/read";
+import { writeFileAtomic } from "../utils/write";
+import { statSync } from "node:fs";
+import { SubmitRequest, ReviewComment } from "../utils/platform";
 
 interface RenderOptions {
   port?: string;
+  output?: string;
 }
 
 const SUB_PATCH_SEPARATOR = "===SUB_PATCH===";
@@ -24,6 +28,7 @@ export function registerRenderCommands(program: Command) {
     .command("render <source>")
     .description("Start a local web server for diff review")
     .option("-p, --port <port>", "port to listen on")
+    .option("-o, --output <file>", "output file")
     .action(RenderAction);
 }
 
@@ -44,9 +49,22 @@ const RenderAction = async (source: string, options: RenderOptions) => {
   console.error(`Loaded ${subPatches.length} sub-patches for review`);
   const port = options.port ? parseInt(options.port, 10) : undefined;
   const submission = await startReviewServer(subPatches, { port });
+  const submitRequest = await convertDraftCommentsToSubmitRequest(submission);
+
+  if (options.output && options.output !== "-") {
+    const stat = statSync(options.output);
+    if (stat.isDirectory()) {
+      console.error(`ERROR: ${options.output} is a directory`);
+      process.exit(1);
+    }
+
+    writeFileAtomic(options.output, JSON.stringify(submitRequest, null, 2));
+    console.error(`Review submission written to ${options.output}`);
+    process.exit(0);
+  }
 
   // Output submission as JSON to stdout
-  process.stdout.write(JSON.stringify(submission, null, 2));
+  process.stdout.write(JSON.stringify(submitRequest, null, 2));
   process.stdout.write("\n");
 };
 
@@ -83,6 +101,14 @@ async function resolveDistDir(): Promise<string> {
     process.exit(1);
   }
   return dir;
+}
+
+// TODO: 处理submission中的draftComments，将draftComments中的change转换为index
+async function convertDraftCommentsToSubmitRequest(submissions: ReviewSubmission): Promise<SubmitRequest> {
+  return {
+    body: "",
+    comments: [],
+  };
 }
 
 /**

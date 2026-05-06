@@ -18,7 +18,7 @@ export interface SubmitRequest {
   comments?: ReviewComment[];
 }
 
-interface ReviewComment {
+export interface ReviewComment {
   path: string;
   body: string;
   position?: number;

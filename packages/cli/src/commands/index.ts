@@ -1,7 +1,8 @@
 import type { Command } from "commander";
 import { parsePatch, formatIndexedChanges, indexChanges } from "@diffdeck/core";
 import { readFile } from "node:fs/promises";
-import { writeFileSync } from "node:fs";
+import { writeFileAtomic } from "../utils/write";
+import { statSync } from "node:fs";
 
 interface IndexOptions {
   output: string;
@@ -22,10 +23,17 @@ const IndexAction = async (diff_file: string, options: IndexOptions) => {
   const output = `${formatIndexedChanges(changes)}\n\nTotal: ${changes.length} change lines\n`;
 
   if (options.output) {
-    writeFileSync(options.output, output);
+    const stat = statSync(options.output);
+    if (stat.isDirectory()) {
+      console.error(`ERROR: ${options.output} is a directory`);
+      process.exit(1);
+    }
+
+    writeFileAtomic(options.output, output);
     console.error(`Wrote ${options.output} (${changes.length} changes)`);
-    return;
+  } else {
+    process.stdout.write(output);
   }
 
-  process.stdout.write(output);
+  process.exit(0);
 }
