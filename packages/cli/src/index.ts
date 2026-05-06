@@ -4,6 +4,7 @@ import { registerRenderCommands } from './commands/render.ts';
 import { registerSplitCommands } from './commands/split.ts';
 import { registerConfigCommands } from './commands/config.ts';
 import { registerPullDiffCommands } from './commands/pull-diff.ts';
+import { registerSubmitCommand } from './commands/submit.ts';
 
 const program = new Command('diffdeck');
 program.version('1.0.0');
@@ -14,5 +15,6 @@ registerRenderCommands(program);
 registerSplitCommands(program);
 registerConfigCommands(program);
 registerPullDiffCommands(program);
+registerSubmitCommand(program);
 
 program.parse();

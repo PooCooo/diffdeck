@@ -12,20 +12,20 @@ interface PlatformClient {
 type SubmitEvent = "REQUEST_CHANGES" | "APPROVE" | "COMMENT";
 
 export interface SubmitRequest {
-    commit_id?: string;
-    event?: SubmitEvent;
-    body: string;
-    comments?: ReviewComment[];
+  commit_id?: string;
+  event?: SubmitEvent;
+  body: string;
+  comments?: ReviewComment[];
 }
 
 interface ReviewComment {
-    path: string;
-    body: string;
-    position ?: number;
-    line?: number;
-    start_line?: number;
-    side?: "LEFT" | "RIGHT";
-    start_side?: "LEFT" | "RIGHT";
+  path: string;
+  body: string;
+  position?: number;
+  line?: number;
+  start_line?: number;
+  side?: "LEFT" | "RIGHT";
+  start_side?: "LEFT" | "RIGHT";
 }
 
 class GitHubClient implements PlatformClient {
@@ -65,7 +65,8 @@ class GitHubClient implements PlatformClient {
   async submitReview(token: string | null, request: SubmitRequest): Promise<void> {
     const headers: Record<string, string> = {
       "User-Agent": "diffdeck-cli",
-      Accept: "application/vnd.github.diff",
+      Accept: "application/vnd.github+json",
+      "Content-Type": "application/json",
     };
     if (token) headers["Authorization"] = `Bearer ${token}`;
 
@@ -142,7 +143,11 @@ class GitLabClient implements PlatformClient {
   }
 
   // TODO: Implement GitLab review submission
-  async submitReview(token: string | null, request: SubmitRequest): Promise<void> {
+  async submitReview(_token: string | null, _request: SubmitRequest): Promise<void> {
+    throw new Error(
+      "GitLab review submission is not yet supported.\n" +
+      "Only GitHub and GitHub Enterprise are currently supported.",
+    );
   }
 
   /** Fallback for GitLab < 15: GET /merge_requests/:iid/changes */
