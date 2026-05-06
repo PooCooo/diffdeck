@@ -45,6 +45,8 @@ const RenderAction = async (source: string, options: RenderOptions) => {
   const port = options.port ? parseInt(options.port, 10) : undefined;
   const submission = await startReviewServer(subPatches, { port });
 
+  
+
   // Output submission as JSON to stdout
   process.stdout.write(JSON.stringify(submission, null, 2));
   process.stdout.write("\n");

@@ -6,6 +6,26 @@ type Platform = "github" | "gitlab";
 
 interface PlatformClient {
   fetchDiff(token: string | null): Promise<string>;
+  submitReview(token: string | null, request: SubmitRequest): Promise<void>;
+}
+
+type SubmitEvent = "REQUEST_CHANGES" | "APPROVE" | "COMMENT";
+
+export interface SubmitRequest {
+    commit_id?: string;
+    event?: SubmitEvent;
+    body: string;
+    comments?: ReviewComment[];
+}
+
+interface ReviewComment {
+    path: string;
+    body: string;
+    position ?: number;
+    line?: number;
+    start_line?: number;
+    side?: "LEFT" | "RIGHT";
+    start_side?: "LEFT" | "RIGHT";
 }
 
 class GitHubClient implements PlatformClient {
@@ -40,6 +60,33 @@ class GitHubClient implements PlatformClient {
     }
 
     return res.text();
+  }
+
+  async submitReview(token: string | null, request: SubmitRequest): Promise<void> {
+    const headers: Record<string, string> = {
+      "User-Agent": "diffdeck-cli",
+      Accept: "application/vnd.github.diff",
+    };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    const url = this.endpoint.toString() + "/reviews";
+
+    let res: Response;
+    try {
+      res = await fetch(url, { headers, method: "POST", body: JSON.stringify(request) });
+    } catch (err: unknown) {
+      throw new Error(
+        `Network error submitting review: ${(err as Error).message}\nURL: ${url}`,
+      );
+    }
+
+    if (!res.ok) {
+      const hint = httpErrorHint(res.status, "github");
+      throw new Error(
+        `HTTP ${res.status} ${res.statusText} from github API.\n${hint}`,
+      );
+    }
+    
   }
 }
 
@@ -92,6 +139,10 @@ class GitLabClient implements PlatformClient {
     }
 
     return text;
+  }
+
+  // TODO: Implement GitLab review submission
+  async submitReview(token: string | null, request: SubmitRequest): Promise<void> {
   }
 
   /** Fallback for GitLab < 15: GET /merge_requests/:iid/changes */
@@ -252,6 +303,19 @@ export async function fetchDiff(
 ): Promise<string> {
   const client = parsePrUrl(raw);
   return client.fetchDiff(token);
+}
+
+
+/**
+ * Submits a review to a PR/MR.
+ */
+export async function submitReview(
+  raw: string,
+  token: string | null,
+  request: SubmitRequest,
+): Promise<void> {
+  const client = parsePrUrl(raw);
+  return client.submitReview(token, request);
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
