@@ -7,7 +7,8 @@ import { readFile, readdir, stat } from "node:fs/promises";
 import type{
   AgentDraftComment,
   ReviewSubmission,
-  ReviewResponse
+  ReviewResponse,
+  SubPatch
 } from "@diffdeck/shared";
 import type { Command } from "commander";
 import { readStdin } from "../utils/read";
