@@ -49,16 +49,20 @@ const RenderAction = async (source: string, options: RenderOptions) => {
   console.error(`Loaded ${subPatches.length} sub-patches for review`);
   const port = options.port ? parseInt(options.port, 10) : undefined;
   const submission = await startReviewServer(subPatches, { port });
-  const submitRequest = await convertDraftCommentsToSubmitRequest(submission);
+  const submitRequest = convertDraftCommentsToSubmitRequest(submission, subPatches);
 
   if (options.output && options.output !== "-") {
-    const stat = statSync(options.output);
-    if (stat.isDirectory()) {
-      console.error(`ERROR: ${options.output} is a directory`);
-      process.exit(1);
+    try {
+      const stat = statSync(options.output);
+      if (stat.isDirectory()) {
+        console.error(`ERROR: ${options.output} is a directory`);
+        process.exit(1);
+      }
+    } catch {
+      // file might not exist yet, which is fine
     }
 
-    writeFileAtomic(options.output, JSON.stringify(submitRequest, null, 2));
+    await writeFileAtomic(options.output, JSON.stringify(submitRequest, null, 2));
     console.error(`Review submission written to ${options.output}`);
     process.exit(0);
   }
@@ -103,11 +107,40 @@ async function resolveDistDir(): Promise<string> {
   return dir;
 }
 
-// TODO: 处理submission中的draftComments，将draftComments中的change转换为index
-async function convertDraftCommentsToSubmitRequest(submissions: ReviewSubmission): Promise<SubmitRequest> {
+// Convert draft comments and manual comments to final SubmitRequest payload
+export function convertDraftCommentsToSubmitRequest(
+  submission: ReviewSubmission,
+  _subPatches: SubPatch[] // Included for future extensive diff matching if needed
+): SubmitRequest {
+  const submitComments: ReviewComment[] = [];
+
+  // Map user-authored manual comments
+  for (const comment of submission.comments || []) {
+    submitComments.push({
+      path: comment.file,
+      body: comment.body,
+      line: comment.line,
+      side: comment.side === "additions" ? "RIGHT" : "LEFT",
+    });
+  }
+
+  // Map accepted agent draft comments
+  const acceptedDrafts = (submission.draftComments || []).filter(
+    (d) => d.status === "accepted"
+  );
+
+  for (const draft of acceptedDrafts) {
+    submitComments.push({
+      path: draft.file,
+      body: draft.body,
+      line: draft.line,
+      side: draft.side === "additions" ? "RIGHT" : "LEFT",
+    });
+  }
+
   return {
-    body: "",
-    comments: [],
+    body: "", // Will be filled by future top-level body support if added
+    comments: submitComments,
   };
 }
 
