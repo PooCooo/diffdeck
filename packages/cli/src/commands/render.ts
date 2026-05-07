@@ -1,10 +1,3 @@
-/**
- * Render command: starts a local web server for diff review.
- *
- * Reads sub-patches from stdin or files, serves pre-built static UI,
- * blocks until the user submits review decisions, then outputs them to stdout.
- */
-
 import {
   createServer,
   type ServerResponse,
@@ -14,22 +7,28 @@ import { readFile, readdir, stat } from "node:fs/promises";
 import type{
   AgentDraftComment,
   ReviewSubmission,
-  SubPatch,
   ReviewResponse,
+  SubPatch
 } from "@diffdeck/shared";
-import { CAC } from "cac";
+import type { Command } from "commander";
 import { readStdin } from "../utils/read";
+import { writeFileAtomic } from "../utils/write";
+import { statSync } from "node:fs";
+import { SubmitRequest, ReviewComment } from "../utils/platform";
 
 interface RenderOptions {
   port?: string;
+  output?: string;
 }
 
 const SUB_PATCH_SEPARATOR = "===SUB_PATCH===";
 
-export function registerRenderCommands(cli: CAC) {
-  cli
+export function registerRenderCommands(program: Command) {
+  program
     .command("render <source>")
-    .option("-p, --port <port>", "port")
+    .description("Start a local web server for diff review")
+    .option("-p, --port <port>", "port to listen on")
+    .option("-o, --output <file>", "output file")
     .action(RenderAction);
 }
 
@@ -50,9 +49,26 @@ const RenderAction = async (source: string, options: RenderOptions) => {
   console.error(`Loaded ${subPatches.length} sub-patches for review`);
   const port = options.port ? parseInt(options.port, 10) : undefined;
   const submission = await startReviewServer(subPatches, { port });
+  const submitRequest = convertDraftCommentsToSubmitRequest(submission);
+
+  if (options.output && options.output !== "-") {
+    try {
+      const stat = statSync(options.output);
+      if (stat.isDirectory()) {
+        console.error(`ERROR: ${options.output} is a directory`);
+        process.exit(1);
+      }
+    } catch {
+      // file might not exist yet, which is fine
+    }
+
+    await writeFileAtomic(options.output, JSON.stringify(submitRequest, null, 2));
+    console.error(`Review submission written to ${options.output}`);
+    process.exit(0);
+  }
 
   // Output submission as JSON to stdout
-  process.stdout.write(JSON.stringify(submission, null, 2));
+  process.stdout.write(JSON.stringify(submitRequest, null, 2));
   process.stdout.write("\n");
 };
 
@@ -89,6 +105,42 @@ async function resolveDistDir(): Promise<string> {
     process.exit(1);
   }
   return dir;
+}
+
+// Convert draft comments and manual comments to final SubmitRequest payload
+export function convertDraftCommentsToSubmitRequest(
+  submission: ReviewSubmission,
+): SubmitRequest {
+  const submitComments: ReviewComment[] = [];
+
+  // Map user-authored manual comments
+  for (const comment of submission.comments || []) {
+    submitComments.push({
+      path: comment.file,
+      body: comment.body,
+      line: comment.line,
+      side: comment.side === "additions" ? "RIGHT" : "LEFT",
+    });
+  }
+
+  // Map accepted agent draft comments
+  const acceptedDrafts = (submission.draftComments || []).filter(
+    (d) => d.status === "accepted"
+  );
+
+  for (const draft of acceptedDrafts) {
+    submitComments.push({
+      path: draft.file,
+      body: draft.body,
+      line: draft.line,
+      side: draft.side === "additions" ? "RIGHT" : "LEFT",
+    });
+  }
+
+  return {
+    body: "", // Will be filled by future top-level body support if added
+    comments: submitComments,
+  };
 }
 
 /**

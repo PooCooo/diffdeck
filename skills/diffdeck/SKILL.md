@@ -30,18 +30,15 @@ mktemp -d /tmp/diffdeck-XXXXXX
 npx diffdeck index pr.diff > <tmpdir>/index.txt
 ```
 
-### 1. 获取diff
+### 1. 获取 diff
 
 使用已经符合用户场景的最低成本路径：
 
-- 如果用户已经提供了`.diff`文件， 直接读取并使用它
-- 如果用户正在审查Github PR， 运行：
+- 如果用户已经提供了 `.diff` 文件，直接读取并使用它
+- 如果用户正在审查 GitHub / GitLab / Gitea 的 PR/MR，且目标平台已在 `diffdeck config` 中配置，使用 `pull-diff` 命令直接拉取（自动处理平台识别和认证）
+- 如果用户在本地的 git 仓库中，并且想比较当前分支与 `main`，运行：
 
-```bash
-gh pr diff 123 > pr.diff
-```
-
-- 如果用户在本地的git仓库中， 并且想比较当前分支与`main`， 运行：
+如果需要使用`pull-diff`命令， 请阅读并参考[references/pull-diff.md](references/pull-diff.md)
 
 ```bash
 git diff main...HEAD > pr.diff
@@ -49,10 +46,10 @@ git diff main...HEAD > pr.diff
 
 其他常见场景的处理方式：
 ```bash
-# 指定另一个github仓库中的pr
+# 指定另一个 github 仓库中的 pr
 gh pr diff 123 --repo owner/repo > pr.diff
 
-# 比较两个commit
+# 比较两个 commit
 git diff <commit-a> <commit-b> > pr.diff
 
 # 已暂存的改动
@@ -144,12 +141,16 @@ echo '<meta JSON>' | npx diffdeck split pr.diff - | npx diffdeck render -
 - 将`draftComments`视为溯源信息，标明各条agent draftComment的状态： resolved（已采纳）、rejected（已拒绝）、pending（未处理）
 - `render` 成功返回结果并已经提取出 `comments` / `draftComments` 后， 如果用户没有要求保留拆分产物， 删除本次使用的 `<tmpdir>`。 如果 `render` 未完成、失败或需要用户继续查看子补丁， 暂时保留 `<tmpdir>` 并在回复中说明路径。
 
-### 7. 将comment提交回Github/来源系统中
+### 7. 将 comment 提交回来源系统
 
 `render` 完成后：
-- 总结`draftComment`被采纳、拒绝、未处理的结果
-- 如果存在最终`comments`， 询问用户是否要将它们提交回原系统
-- 若上下文中目标已经明确（例如具体PR或评审线程）， 则直接在该处继续， 不必再问一次
-- 提交时使用`comments`， 不要使用原始的`draftComments`。
-- 若没有最终的`comments`, 要和用户说清楚当前没有需要提交的comment， 然后停下
-- 若来源系统不明确（Github、Gitlab或私有化代码平台），需要先向用户问清楚再操作
+- 总结 `draftComment` 被采纳、拒绝、未处理的结果
+- 如果存在最终 `comments`，询问用户是否要将它们提交回原系统
+- 若上下文中目标已经明确（例如具体 PR/MR URL），则直接在该处继续，不必再问一次
+- 提交时使用 `comments`，不要使用原始的 `draftComments`
+- 若没有最终的 `comments`，要和用户说清楚当前没有需要提交的 comment，然后停下
+- 若来源系统不明确（GitHub、GitLab 或私有化代码平台），需要先向用户问清楚再操作
+
+如果需要使用`submit`命令， 阅读并参考[references/submit.md](references/submit.md)
+
+> **当前平台支持情况**：GitHub / GitHub Enterprise 已完整实现；GitLab 提交已规划（`submit` 对 GitLab MR 会报错 "GitLab review submission is not yet supported"）。

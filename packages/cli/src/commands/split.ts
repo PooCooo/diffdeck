@@ -1,4 +1,4 @@
-import { CAC } from "cac";
+import type { Command } from "commander";
 import { readFile, mkdir, writeFile } from "node:fs/promises";
 import { parsePatch, indexChanges, validateMeta, generateSubPatches, reconstructBase, applyPatch, resolveSplitGroupMeta } from "@diffdeck/core";
 import type { SplitMeta, ResolvedSplitGroupMeta } from "@diffdeck/shared";
@@ -8,9 +8,11 @@ interface SplitOptions {
   output: string;
 }
 
-export function registerSplitCommands(cli: CAC) {
-  cli.command("split <diff_file> <split_meta_file>")
-    .option("-o, --output <file>", "output file")
+export function registerSplitCommands(program: Command) {
+  program
+    .command("split <diff_file> <split_meta_file>")
+    .description("Split a diff file into sub-patches according to a meta file")
+    .option("-o, --output <dir>", "output directory for sub-patches")
     .action(SplitAction);
 }
 
