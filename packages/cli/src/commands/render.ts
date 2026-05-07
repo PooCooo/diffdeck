@@ -7,7 +7,6 @@ import { readFile, readdir, stat } from "node:fs/promises";
 import type{
   AgentDraftComment,
   ReviewSubmission,
-  SubPatch,
   ReviewResponse
 } from "@diffdeck/shared";
 import type { Command } from "commander";
@@ -49,7 +48,7 @@ const RenderAction = async (source: string, options: RenderOptions) => {
   console.error(`Loaded ${subPatches.length} sub-patches for review`);
   const port = options.port ? parseInt(options.port, 10) : undefined;
   const submission = await startReviewServer(subPatches, { port });
-  const submitRequest = convertDraftCommentsToSubmitRequest(submission, subPatches);
+  const submitRequest = convertDraftCommentsToSubmitRequest(submission);
 
   if (options.output && options.output !== "-") {
     try {
@@ -110,7 +109,6 @@ async function resolveDistDir(): Promise<string> {
 // Convert draft comments and manual comments to final SubmitRequest payload
 export function convertDraftCommentsToSubmitRequest(
   submission: ReviewSubmission,
-  _subPatches: SubPatch[] // Included for future extensive diff matching if needed
 ): SubmitRequest {
   const submitComments: ReviewComment[] = [];
 

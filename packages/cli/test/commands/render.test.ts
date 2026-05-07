@@ -1,17 +1,15 @@
 import { describe, it, expect } from "vitest";
 import { convertDraftCommentsToSubmitRequest } from "../../src/commands/render";
-import type { ReviewSubmission, SubPatch } from "@diffdeck/shared";
+import type { ReviewSubmission } from "@diffdeck/shared";
 
 describe("convertDraftCommentsToSubmitRequest", () => {
-  const dummySubPatches: SubPatch[] = []; // Currently unused by the conversion logic but required by signature
-
   it("returns empty comments when submission has no comments", () => {
     const submission: ReviewSubmission = {
       comments: [],
       draftComments: [],
     };
 
-    const result = convertDraftCommentsToSubmitRequest(submission, dummySubPatches);
+    const result = convertDraftCommentsToSubmitRequest(submission);
     expect(result.body).toBe("");
     expect(result.comments).toEqual([]);
   });
@@ -39,7 +37,7 @@ describe("convertDraftCommentsToSubmitRequest", () => {
       draftComments: [],
     };
 
-    const result = convertDraftCommentsToSubmitRequest(submission, dummySubPatches);
+    const result = convertDraftCommentsToSubmitRequest(submission);
     expect(result.comments).toHaveLength(2);
     expect(result.comments?.[0]).toEqual({
       path: "src/index.ts",
@@ -95,7 +93,7 @@ describe("convertDraftCommentsToSubmitRequest", () => {
       ],
     };
 
-    const result = convertDraftCommentsToSubmitRequest(submission, dummySubPatches);
+    const result = convertDraftCommentsToSubmitRequest(submission);
     expect(result.comments).toHaveLength(1);
     expect(result.comments?.[0]).toEqual({
       path: "src/main.ts",
@@ -132,7 +130,7 @@ describe("convertDraftCommentsToSubmitRequest", () => {
       ],
     };
 
-    const result = convertDraftCommentsToSubmitRequest(submission, dummySubPatches);
+    const result = convertDraftCommentsToSubmitRequest(submission);
     expect(result.comments).toHaveLength(2);
     expect(result.comments).toEqual([
       {
